@@ -1,0 +1,228 @@
+#include  <MSP430G2253.h>
+     
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+            
+            
+Lcd_cmd     MACRO   command
+            Debounce   #1750                  ;5msec           
+            mov.b   command,&P1OUT         ;Data Byte = command           
+            call    #Lcd_strobe            ;update screen           
+            ENDM
+
+Lcd_data    MACRO   letter
+            Debounce #1750              ; 5msec
+            clr.b   &P1OUT                 ; Data Byte = 0x00
+            bis.b   #BIT5,&P2OUT           ; RS = ‘1’ – Data Byte contains ASCII code
+            mov.b   letter,&P1OUT          ; Data Byte = char
+            call    #Lcd_strobe            ; update screen
+            bic.b   #BIT5,&P2OUT           ; RS = ‘0’ – Data Byte contains instruction code
+            ENDM
+            
+            
+Debounce    MACRO  cycles            
+            LOCAL  D            
+            mov.w  cycles,R15     
+D           dec.w  R15                                 
+            jnz    D            
+            ENDM
+
+
+            NAME       prelab5
+            PUBLIC     TA0_ISR,SCREEN
+            EXTERN  
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+            RSEG     CSTACK
+            RSEG     CODE
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+RESET      mov.w #SFE(CSTACK),SP
+StopWDT    mov.w #WDTPW+WDTHOLD,&WDTCTL
+counter    DW 0
+
+SetupP1     bic.b   #0xff,&P1SEL
+            bis.b   #0xff,&P1DIR
+            
+SetupP2     bic.b   #0x0b,&P2SEL     ;I/O
+            bic.b   #0x0b,&P2DIR     ; input
+            bis.b   #0x0b,&P2IES
+            bis.b   #0x0b,&P2IE
+            bic.b   #0xff,&P2IFG
+            bis.b   #0x04,&P2SEL
+            bis.b   #0x04,&P2DIR
+            
+            
+Setup24     bis.b   #0x10,&P2SEL
+            bic.b   #0x10,&P2DIR
+            bic.b   #0x10,&P2IES
+           
+;            clr &TBR                                  ; Clean Timer_B counter
+;            mov.w #TBSSEL_1+MC_2,&TBCTL               ; ACLK, continuous mode up to 0xffff
+;            mov.w #CM_1+SCS+CAP+CCIE,&TBCCTL1         ; Capture on rising edges
+            
+            
+            
+            call #setup_LCD
+            
+            bic.b   #0xff,&P2IFG
+            clr     R4
+          
+Mainloop     bis.w   #CPUOFF+GIE,SR ; CPU off
+            nop     ; Required for debugger
+
+PB0       bit.b #1,R4      ;checks PB0
+          JNZ PB00
+PB1       bit.b #2,R4     ;checks PB1
+          JNZ PB11
+PB2       bit.b #4,R4      ;checks PB2
+          JNZ PB22
+          jmp Mainloop
+
+
+PORT2_ISR bit.b #1,P2IFG
+          jz s1
+          mov   #1,R4
+          bic.b  #1,P2IFG
+          jmp s3
+s1        bit.b #2,P2IFG
+          jz s2
+          mov #2,R4
+          bic.b  #2,P2IFG
+          jmp s3
+s2        bit.b #8,P2IFG
+          jz  s3
+          mov #4,R4
+          bic.b  #8,P2IFG
+          jmp s3
+         ; bic   #TAIFG,&TACTL
+         ; bic.b #0x0b,&P2IE
+s3        bic #CPUOFF,0(SP) 
+          reti
+
+TA0_ISR 
+        bic  #TAIFG,&TA0CTL
+        bic #CPUOFF,0(SP)   
+        reti
+        
+TA1_ISR 
+        bic  #TAIFG,&TA1CTL
+        bic #CPUOFF,0(SP)   
+        reti
+
+;-------------------------------------------------------------------------------               
+                
+          
+PB00    MOV     #48,R10
+        MOV     #48,R11
+        MOV     #48,R12
+        mov.w   #TASSEL_2+MC_3+ID_3,&TA0CTL 
+        bis     #TAIE,&TACTL
+        mov.w   #65535,&TACCR0
+SCREEN  bis.w   #CPUOFF+GIE,SR
+        Lcd_cmd #0x01
+        Lcd_data R12
+        Lcd_data R11
+        Lcd_data R10
+        CMP      #57,R10
+        JEQ      ADD10
+        INC      R10
+        JNE      SCREEN
+ADD10   CMP      #57,R11
+        JEQ      ADD100
+        INC      R11
+        MOV      #48,R10
+        JMP      SCREEN
+ADD100  CMP      #57,R12
+        JEQ      F
+        INC      R12
+        MOV      #48,R10
+        MOV      #48,R11
+        JMP      SCREEN
+F       bic      #TAIE,&TACTL   
+        bic.b    #0x01,&P2IFG
+        ret
+
+Wait   mov.w #53,R9
+L5     mov.w #30533,R8
+Q      dec.w R8
+       JNZ   Q
+       dec.w R9
+       JNZ   L5
+       ret
+         
+PB11    mov.w   #TASSEL_2+MC_3+ID_3,&TA0CTL 
+        mov.w   #TASSEL_2+MC_1,&TA1CTL
+        bis     #TAIE,&TACTL     
+        mov.w   #65535,&TA0CCR0
+        mov.w   #1050,&TA1CCR0
+CELR    mov.w   #OUTMOD_6,&TA1CCTL1
+        mov.w   #0,&TA1CCR1
+        call    #Wait
+        mov.w   #210,&TA1CCR1
+        call    #Wait
+        mov.w   #420,&TA1CCR1
+        call    #Wait
+        mov.w   #630,&TA1CCR1
+        call    #Wait
+        mov.w   #840,&TA1CCR1
+        call    #Wait
+        mov.w   #1050,&TA1CCR1
+        call    #Wait
+        jmp     CELR
+        
+
+PB22    bis.b   #0x10,&P2IE    
+        bit.b #0x10,&P2IFG
+        JZ    sleep
+        inc   counter
+        bic.b #0x10,&P2IFG
+sleep   reti
+      
+            
+Lcd_strobe  bis.b #BIT7,&P2OUT              ; E=1
+            NOP
+            NOP
+            bic.b #BIT7,&P2OUT              ; E=0
+            ret
+            
+            
+                                   
+setup_LCD   bic.b   #0xE0,&P2SEL ; set P3.5-7 as I/O
+            bis.b   #0xE0,&P2DIR ; set output
+            bic.b   #0xE0,&P2OUT 
+            bic.b   #0xFF,&P1SEL
+            bis.b   #0xFF,&P1DIR
+            Debounce #5250                 ; 15msec
+            mov.b   #0x3F,&P1OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Debounce #1750                 ; 5msec
+            mov.b   #0x3F,&P1OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Debounce #70                    ; 200usec
+            mov.b   #0x3F,&P1OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Lcd_cmd #0x3C
+            Lcd_cmd #0x0F                  ; cursor on
+            Lcd_cmd #0x01                  ; LCD clear
+            Lcd_cmd #0x06
+            Lcd_cmd #0x80
+            Lcd_cmd #0x02
+            RET
+            
+    
+;-------------------------------------------------------------------------------
+ COMMON INTVEC ; Interrupt Vectors
+;-------------------------------------------------------------------------------
+                 ORG RESET_VECTOR
+                 DW  RESET 
+                 ORG PORT2_VECTOR
+                 DW  PORT2_ISR 
+                 ORG TIMER0_A0_VECTOR
+                 DW  TA0_ISR 
+                 ORG TIMER0_A1_VECTOR
+                 DW  TA0_ISR 
+                 ORG TIMER1_A1_VECTOR
+                 DW  TA1_ISR
+                 ENDMOD
+                 END

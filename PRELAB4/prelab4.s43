@@ -1,0 +1,116 @@
+#include <msp430G2553.h>
+
+;-------------------------------------------------------------------------------
+ ;RSEG CSTACK ; Begins a relocatable segment name of CSTACK - Define stack segment
+;-------------------------------------------------------------------------------
+ ;RSEG CODE ; Assemble to Flash memory -like void main in C
+;-----------------------------------------------------------------------------
+           
+           MODULE Start
+           PUBLIC Start,PORT2_ISR,Wait
+           RSEG   CODE
+           
+Start        
+           
+
+           bic.b #0xff,&P1SEL
+           bis.b #0xff,&P1DIR
+           bic.b #0xff,&P1OUT
+           
+SetupPB0_1 bic.b #0xff,&P2SEL
+           bic.b #0xff,&P2DIR
+           bis.b #0xff,&P2IES
+           bis.b #0xff,&P2IE
+           bic.b #0xff,&P2IFG
+           
+           bis.w #CPUOFF+GIE,SR ;LMP0
+           nop
+           
+PORT2_ISR bit.b #0x01,&P2IFG
+          jnz   P1_0
+          bit.b #0x02,&P2IFG
+          jnz   P1_1
+          bit.b #0x04,&P2IFG
+          jnz   P1_2
+          bit.b #0x08,&P2IFG
+          jnz   P1_3
+
+
+Wait mov.w #6,R9
+L5   mov.w #30533,R10
+Q    dec.w R10
+     jnz Q
+     dec.w R9
+     jnz L5
+     ret
+
+
+P1_0 mov   #20,R15
+     mov.b #0x00,R14
+T    mov.b R14,P1OUT
+     cmp.b #0x03,&P2IFG
+     jz   i
+     cmp.b #0x05,&P2IFG
+     jz   i
+     cmp.b #0x09,&P2IFG
+     jz   i
+     inc.b R14
+     call #Wait
+     dec R15
+     jz  i
+     tst.b R14
+     jnz    T
+i    bic.b #0x01,&P2IFG
+     reti
+     
+     
+     
+P1_1  mov   #35,R5
+O     mov.b #0x01,R4
+      mov.b   R4,&P1OUT
+R     cmp.b #0x03,&P2IFG
+      jz   P
+      cmp.b #0x06,&P2IFG
+      jz   P
+      cmp.b #0x0A,&P2IFG
+      jz   P
+      call  #Wait
+      cmp.b   #0x80,&P1OUT
+      jz    O
+      rla.b &P1OUT
+      dec   R5
+      cmp   #0,R5
+      jnz   R
+P     bic.b #0x02,&P2IFG
+      reti
+      
+      
+P1_2  mov   #35,R5
+U     mov.b #0x01,R4
+      mov.b R4,&P1OUT
+S     cmp.b #0x05,&P2IFG
+      jz   Y
+      cmp.b #0x06,&P2IFG
+      jz   Y
+      cmp.b #0x0C,&P2IFG
+      jz   Y
+      call #Wait
+      cmp.b   #0xff,&P1OUT
+      jz    U
+      rla.b  &P1OUT
+      bis.b  #0x01,&P1OUT
+      dec   R5
+      cmp   #0,R5
+      jnz   S
+Y     bic.b #0x04,&P2IFG
+      reti
+      
+P1_3 bic.b #0xff,&P1OUT
+     bic.b #0x08,&P2IFG
+     reti
+      
+      
+     ret
+     ENDMOD
+
+    END

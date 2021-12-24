@@ -1,0 +1,23 @@
+#include <msp430G2553.h>
+
+ NAME   Main
+ PUBLIC Main
+ EXTERN Start,PORT2_ISR,Wait
+
+         RSEG CSTACK 
+         RSEG CODE
+
+Main      mov.w #SFE(CSTACK),SP
+StopWDT    mov.w #WDTPW+WDTHOLD,&WDTCTL
+           call #Start
+
+    NOP
+
+;----------------------------------------------------------------------------
+    COMMON INTVEC
+;----------------------------------------------------------------------------
+    ORG   PORT2_VECTOR
+    DW    PORT2_ISR
+    ORG   RESET_VECTOR
+    DW    Main
+    END

@@ -1,0 +1,126 @@
+#include  <msp430xG46x.h>
+
+
+         RSEG CSTACK
+         RSEG CODE
+
+Main       mov.w #SFE(CSTACK),SP
+StopWDT    mov.w #WDTPW+WDTHOLD,&WDTCTL
+
+           bic.b #0xf0,&P2SEL
+           bis.b #0xf0,&P2DIR
+           bic.b #0xf0,&P2OUT
+
+SetupPB0_1 bic.b #0x03,&P1SEL
+           bic.b #0x03,&P1DIR
+           bis.b #0x03,&P1IES
+           bis.b #0x03,&P1IE
+           bic.b #0x03,&P1IFG
+
+SetupPB2   bic.b #0x01,&P2SEL
+           bic.b #0x01,&P2DIR
+           bis.b #0x01,&P2IES
+           bis.b #0x01,&P2IE
+           bic.b #0x01,&P2IFG
+
+           bis.w #CPUOFF+GIE,SR ;LMP0
+           
+
+
+
+PORT1_ISR bit.b #0x01,&P1IFG
+          jnz   P1_0
+          bit.b #0x02,&P1IFG
+          jnz   P1_1
+
+
+PORT2_ISR bit.b #0x01,&P2IFG
+          jnz   P2_0
+
+
+
+Wait mov.w #3,R9
+L5   mov.w #30533,R10
+Q    dec.w R10
+     jnz Q
+     dec.w R9
+     jnz L5
+     ret
+
+
+P1_0 mov   #38,R15
+L    mov.b #0x10,R14
+T    mov #0,R8
+     bit.b #0x01,&P2IFG
+     jnz   P2_0
+re10 cmp #0,R15
+     jz  P1_0
+     mov.b R14,&P2OUT
+     add.b #0x10,R14
+     call #Wait
+     dec R15
+     jz  i
+     cmp #0x00,R14
+     jnz    T
+     cmp #0x00,R14
+     jz   L
+i    bic.b #0x01,&P1IFG
+     mov #2,R8
+     reti
+
+
+
+P1_1  mov   #10,R5
+O     mov.b #0x10,R4
+      mov.b  R4,&P2OUT
+R     mov    #1,R8
+      bit.b #0x01,&P2IFG
+      jnz   P2_0
+re11 call  #Wait
+      cmp #0,R5
+      jz  P1_1
+      cmp.b #0x80,R4
+      jz    O
+      rla.b R4
+      mov.b R4,&P2OUT
+      dec   R5
+      cmp   #0,R5
+      jnz   R
+P     bic.b #0x02,&P1IFG
+      mov #2,R8
+      reti
+
+
+P2_0
+U     mov.b #0x10,R12
+      mov.b R12,&P2OUT
+S     call #Wait
+      cmp.b   #0xf0,R12
+      jz    U
+      rla.b  R12
+      bis.b  #0x10,R12
+      mov.b  R12,&P2OUT
+      cmp   #0xf0,R12
+      jnz   S
+Y     bic.b #0xff,&P2IFG
+      cmp.b #0x02,P1IFG
+      jz  re11
+      cmp.b #0x01,P1IFG
+      jz  re10
+      cmp #0,R8
+      jz  re10
+      cmp #1,R8
+      jz  re11
+      reti
+      nop
+
+;----------------------------------------------------------------------------
+    COMMON INTVEC
+;----------------------------------------------------------------------------
+    ORG   PORT1_VECTOR
+    DW    PORT1_ISR
+    ORG   PORT2_VECTOR
+    DW    PORT2_ISR
+    ORG   RESET_VECTOR
+    DW    Main
+    END

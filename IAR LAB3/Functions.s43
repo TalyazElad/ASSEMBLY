@@ -1,0 +1,124 @@
+#include <msp430xG46x.h>
+ORG 1100h
+MyStr1 DB "206888661315326520"
+STRsize DC16 STRsize-MyStr1
+
+    MODULE SETUP
+    PUBLIC SETUPP , Wait
+    RSEG   CODE
+   
+
+SETUPP   bis.b #0xff,&P9DIR 
+         bis.b #0xff,&P10DIR
+         bic.b #0x0f,&P1DIR
+
+Check0  cmp.b #0x01,&P1IN
+        jz SW0
+Check1  cmp.b #0x02,&P1IN
+        jz SW1
+Check2  cmp.b #0x04,&P1IN
+        jz SW2
+Check3  MOV.B #0x00,P9OUT
+        MOV.B #0x00,P10OUT
+        RET
+
+   
+Wait mov.w #52429,R8 ; Delay to R15, #050000 --> R15
+L    dec.w R8 ; Decrement 
+     jnz L ; Delay over?, jump if not zero(if bit Z in SR isn't zero from the last command)
+     ret
+
+SW0  mov.b #0x00,R14
+     mov.b #0x00,R15
+     mov.b R15,&P10OUT
+SW00 mov.b R14,&P9OUT
+     CALL #Wait
+     inc   R14
+     TST.B R14
+     JZ    SW01
+     JMP   SW00
+SW01 inc R15
+     TST.B R15
+     JZ    SW0
+     mov.b R15,&P10OUT
+     mov.b #0x00,R14
+     JMP SW00
+     
+
+SW1  mov.b #0xFF,R14
+     mov.b #0xFF,R15
+     mov.b R15,&P10OUT
+SW10 mov.b R14,&P9OUT
+     CALL #Wait
+     DEC   R14
+     TST.B R14
+     JZ    SW11
+     JMP   SW10
+SW11 DEC R15
+     TST.B R15
+     JZ    SW1
+     mov.b R15,&P10OUT
+     mov.b #0xFF,R14
+     JMP SW10
+     
+
+      
+SW2  MOV #MyStr1,R4
+SWN  CALL #Wait
+     MOV.B #0x00,P9OUT
+     MOV.B #0x00,P10OUT
+     MOV.B @R4+,R6
+
+     CMP   #0,R6
+     JEQ   j
+     CMP.B #'0',R6
+     JEQ SW20
+     CMP.B #'1',R6
+     JEQ SW21
+     CMP.B #'2',R6
+     JEQ SW22
+     CMP.B #'3',R6
+     JEQ SW23
+     CMP.B #'4',R6
+     JEQ SW24
+     CMP.B #'5',R6
+     JEQ SW25
+     CMP.B #'6',R6
+     JEQ SW26
+     CMP.B #'7',R6
+     JEQ SW27
+     CMP.B #'8',R6
+     JEQ SW28
+     CMP.B #'9',R6
+     JEQ SW29
+     
+     
+SW20 MOV.B #0x01,P9OUT
+     JMP    SWN
+SW21 MOV.B #0x02,P9OUT
+     JMP    SWN
+SW22 MOV.B #0x04,P9OUT
+     JMP    SWN
+SW23 MOV.B #0x08,P9OUT
+     JMP    SWN
+SW24 MOV.B #0x10,P9OUT
+     JMP    SWN
+SW25 MOV.B #0x20,P9OUT
+     JMP    SWN
+SW26 MOV.B #0x40,P9OUT
+     JMP    SWN
+SW27 MOV.B #0x80,P9OUT
+     JMP    SWN
+SW28 MOV.B #0x01,P10OUT
+     JMP    SWN
+SW29 MOV.B #0x02,P10OUT
+     JMP    SWN
+     RET
+     
+j jmp j
+
+ ENDMOD
+ 
+ //============
+ 
+ END

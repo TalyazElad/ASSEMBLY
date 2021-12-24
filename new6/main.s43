@@ -1,0 +1,100 @@
+#include  <msp430G2553.h>
+
+;-------------------------------------------------------------------------------          
+                NAME      RESET   
+                EXTERN    setup_LCD,PRINT,Highest,Lowest
+                RSEG      CODE
+                
+;---------------------------------------------------------
+    ORG      0200h
+    RSEG     CSTACK
+    RSEG     CODE
+;---------------------------------------------------------    
+    
+RESET       mov.w   #SFE(CSTACK),SP               
+StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  
+
+;------------------------------------------------------------SETUP
+
+
+SetupLCD    call    #setup_LCD 
+SetupP1     bic.b   #0x03,&P1SEL     ;I/O
+            bic.b   #0x03,&P1DIR     ;Input
+            bis.b   #0x03,&P1IES
+            bis.b   #0x03,&P1IE       ;enable
+            bic.b   #0xff,&P1IFG
+            
+Setup23     bis.b   #0x08,&P1SEL
+            bic.b   #0x08,&P1DIR
+            bic.b   #0x08,&P1IES   
+            bic.b   #0xff,&P2IFG
+
+        
+MainLoop    bis.w   #CPUOFF+GIE,SR   
+            nop
+PB0         cmp.b   #0x01,&P1IFG      
+            jne     PB1
+            call    #PRINT
+PB1         cmp.b   #0x02,&P1IFG      
+            jne     PB2
+            nop
+PB2         bic.b   #0x03,&P1IFG      
+            bis.b   #0x03,&P1IE       
+            jmp     MainLoop                              
+            
+
+PORT1_ISR   call    #Wait       
+            bic.b   #0x03,&P1IE
+            bic     #CPUOFF,0(SP)
+            reti
+
+
+TA0_ISR     bic     #TAIFG,&TACTL
+            bic     #CPUOFF,0(SP)   ;wakes CPU
+            reti
+
+
+TA1_ISR     bic     #TAIFG,&TA1CTL
+            mov     #0x00,R12
+            call    #Highest
+            call    #Lowest
+            reti  
+        
+ADC10_ISR   cmp     #0x01,R12         ;checks if first round
+            jeq     CHECKLH
+            mov     #0x01,R12
+            mov     &ADC10MEM,R5
+            mov     &ADC10MEM,R4
+            reti
+CHECKLH     cmp.w   R4,&ADC10MEM        
+            jlo     Lower             
+            cmp.w   &ADC10MEM,R5
+            jlo     Higher
+            reti
+Lower       mov.w   &ADC10MEM,R4
+            reti
+Higher      mov.w   &ADC10MEM,R5        
+            reti
+
+
+Wait        mov.w   #400,R15
+L           dec.w   R15
+            jnz L
+            ret
+        
+             
+
+;------------------------------------------------------------------------------
+            COMMON  INTVEC                 
+;------------------------------------------------------------------------------
+            ORG     PORT1_VECTOR            ;PORT2 Interrupt Vector Address 0xFFE2
+            DW      PORT1_ISR            
+            ORG     RESET_VECTOR            ; MSP430 RESET Vector
+            DW      RESET
+            ORG     TIMER0_A1_VECTOR                  ; Timer_A0 Vector
+            DW      TA0_ISR
+            ORG     ADC10_VECTOR            ; ADC10 Vector
+            DW      ADC10_ISR
+            ORG     TIMER1_A1_VECTOR
+            DW      TA1_ISR
+            END

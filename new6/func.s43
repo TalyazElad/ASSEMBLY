@@ -1,0 +1,176 @@
+#include  <msp430G2553.h>
+;------------------------------------------------------LCDMacroFunc
+
+
+
+Turn_Hex  MACRO R
+          LOCAL Zero_P
+          LOCAL One_P
+          LOCAL Two_P
+          LOCAL End_P
+          mov R,R10
+          bic #0xffff,R7
+          bic #0xffff,R8
+          bic #0xffff,R9
+Zero_P    cmp #30,R10
+          jlo One_P
+          inc R7
+          sub #19,R10
+          jmp Zero_P          
+One_P     cmp #0x1e,R10
+          jlo Two_P
+          inc R8
+          sub #30,R10
+          jmp One_P 
+Two_P     cmp #0x03,R10
+          jlo End_P
+          inc R9
+          sub #0x03,R10
+          jmp Two_P
+End_P     nop
+          ENDM
+          
+
+
+Lcd_cmd     MACRO    command
+            Debounce #1750                  ;5msec
+            mov.b    command,&P2OUT         ;Data Byte = command
+            call     #Lcd_strobe            ;update screen
+            ENDM
+            
+Debounce    MACRO  cycles
+            LOCAL  D
+            mov.w  cycles,R15     
+D           dec.w  R15                     
+            jnz    D
+            ENDM
+
+Lcd_data    MACRO   letter
+            Debounce #1750                  ; 5msec
+            clr.b   &P1OUT                 ; Data Byte = 0x00
+            bis.b   #BIT6,&P1OUT           ; RS = ‘1’ – Data Byte contains ASCII code
+            mov.b   letter,&P2OUT          ; Data Byte = char
+            call    #Lcd_strobe            ; update screen
+            bic.b   #BIT6,&P1OUT           ; RS = ‘0’ – Data Byte contains instruction code
+            ENDM
+;------------------------------------------------------LCDMacroFunc            
+            
+;-------------------------------------------------------------------------------          
+                MODULE    functions
+                PUBLIC    setup_LCD,PRINT,Highest,Lowest
+                EXTERN    TA1_ISR,ADC10_ISR,TA0_ISR,PORT1_ISR
+                RSEG      CODE
+               
+;------------------------------------------------------------LCDSETUP
+
+setup_LCD   bic.b   #0xE0,&P1SEL  ;set P3.5-7 as I/O
+            bis.b   #0xE0,&P1DIR  ;set output
+            bic.b   #0xE0,&P1OUT 
+            bic.b   #0xFF,&P2SEL  ;set LCD
+            bis.b   #0xFF,&P2DIR
+            Debounce #5250                 ; 15msec
+            mov.b   #0x3F,&P2OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Debounce #1750                 ; 5msec
+            mov.b   #0x3F,&P2OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Debounce #70                    ; 200usec
+            mov.b   #0x3F,&P2OUT           ; Data Byte = 0x3F
+            call    #Lcd_strobe            ; Lcd_strobe routine
+            Lcd_cmd #0x3C
+            Lcd_cmd #0x0F                  ; cursor on
+            Lcd_cmd #0x01                  ; LCD clear
+            Lcd_cmd #0x06
+            Lcd_cmd #0x80
+            Lcd_cmd #0x02
+            RET
+            
+                            
+Wait    mov.w #400,R15
+L       dec.w R15
+        jnz L
+        ret
+        
+Lcd_strobe   bis.b #BIT7,&P1OUT              ; E=1
+             NOP
+             NOP
+             bic.b #BIT7,&P1OUT              ; E=0
+             RET
+            
+Lowest   mov.w   &ADC10MEM,R4
+         Turn_Hex R4
+         Lcd_cmd #0x02
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_data #48
+         Lcd_cmd #0x14
+         Lcd_data #48
+         Lcd_data #51
+         ret
+         
+Highest  mov.w   &ADC10MEM,R5
+         Turn_Hex R5
+         Lcd_cmd #0xc0
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_cmd #0x14
+         Lcd_data R7
+         Lcd_cmd #0x14
+         Lcd_data R8
+         Lcd_data R9
+         ret
+
+;------------------------------------------------------------print base
+
+PRINT Lcd_data #86
+      Lcd_data #109
+      Lcd_data #105
+      Lcd_data #110
+      Lcd_data #61
+      Lcd_data #48
+      Lcd_data #46
+      Lcd_data #48
+      Lcd_data #48
+      Lcd_cmd  #0xC0
+      Lcd_data #86
+      Lcd_data #109
+      Lcd_data #97
+      Lcd_data #120
+      Lcd_data #61
+      Lcd_data #48
+      Lcd_data #46
+      Lcd_data #48
+      Lcd_data #48
+      Lcd_cmd  #0x02
+      ;call #Lowest
+      ;call #Highest
+      
+;-----------------------------------------------------sets timerA to print voltage     
+      mov.w   #TASSEL_2+TAIE+MC_3+ID0,&TA1CTL ; SMCLK, upmode 1 sec 
+      bis.b   #DIVS_2,BCSCTL2
+      mov.w   #0xffff,&TA1CCR0
+;-----------------------------------------------------sets timerA to print voltage 
+
+      mov.w   #INCH_3+ADC10DIV_4+CONSEQ_2,&ADC10CTL1;  takes sample from P1.3,  divides timer by 4, samples routinesly 
+      mov.w   #ADC10SHT_2+MSC+ADC10ON+ADC10IE,&ADC10CTL0; sets example timer, routiesly samples, enables interuptions
+      bis.w   #ENC+ADC10SC,&ADC10CTL0 ;
+      
+PRINTLOOP   bis.w #CPUOFF+GIE,SR   ;sleep mode
+            nop
+            jmp PRINTLOOP
+      
+            ret
+      
+ 
+      
+
+      
+      
+;----------------------------------------------hexdec
+
+            END

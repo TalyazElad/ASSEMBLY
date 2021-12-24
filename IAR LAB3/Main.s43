@@ -1,0 +1,24 @@
+#include <msp430xG46x.h>
+
+
+ NAME   Main
+ PUBLIC Main
+ EXTERN SETUPP,Wait
+
+         RSEG CSTACK 
+         RSEG CODE
+
+Main mov.w #SFE(CSTACK),SP
+StopWDT mov.w #WDTPW+WDTHOLD,&WDTCTL
+J        CALL #SETUPP
+         JMP  J
+
+
+
+      NOP
+;------------------------------------------------------------------------------
+ COMMON INTVEC ; Interrupt Vectors-Begins a common segment with name of INTVEC
+;------------------------------------------------------------------------------
+ ORG RESET_VECTOR ; MSP430 RESET Vector
+ DW  Main
+ END
